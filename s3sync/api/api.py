@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 import os
 import multiprocessing
+import tempfile
 
 import envoy
 import boto
 
 from boto.s3.key import Key
 from boto.s3.bucket import Bucket
+
+from helpers import get_volumes
 
 if not os.environ.get('AWS_ACCESS_KEY_ID') or (
         not os.environ.get('AWS_SECRET_ACCESS_KEY')):
@@ -35,20 +38,9 @@ def upload(args):
     if redundancy:
         if isinstance(redundancy, (int, long)) and redundancy > 0:
             for x in range(redundancy-1):
-                keys.append('%s-r%s' % (key_basename, str(x),))
+                keys.append('%sr-%s' % (str(x), key_basename,))
 
-    if len(args.get('--volume')):
-        upload_volumes = args.get('--volume')
-    else:
-        upload_volumes = []
-        # Get a list of docker mounted volumes
-        # TODO: make sure this works across volume types
-        r = envoy.run('mount | grep by-uuid | grep rw')
-        raw_mounts = r.std_out.split("\n")
-        for raw_mount in raw_mounts:
-            if raw_mount:
-                upload_volumes.append(raw_mount.split(' ')[2])
-
+    upload_volumes = get_volumes(args)
     if not len(upload_volumes):
         raise Exception(
             'No volumes specified and unable to infer from mounts')
@@ -59,14 +51,58 @@ def upload(args):
             'Unable to find all specified volumes')
 
     # Tar up the volumes, gzip for size reduction
-    tmp_name = os.tmpnam()
-    envoy.run('tar czf %s %s' % (tmp_name, ' '.join(upload_volumes),))
+    tmp_name = tempfile.NamedTemporaryFile().name
+    try:
+        envoy.run('tar czf %s %s' % (tmp_name, ' '.join(upload_volumes),))
 
-    for k in keys:
-        key = Key(bucket)
-        key.name = k
-        try:
-            key.set_contents_from_filename(tmp_name, encrypt_key=True)
-        except Exception as e:
-            raise Exception('There was a problem storing the data: %s' %
-                    e.message)
+        for k in keys:
+            key = Key(bucket)
+            key.name = k
+            try:
+                key.set_contents_from_filename(tmp_name, encrypt_key=True)
+            except Exception as e:
+                raise Exception('There was a problem storing the data: %s' %
+                        e.message)
+    finally:
+        envoy.run('rm -rf %s' % tmp_name)
+
+
+def download(args):
+    # Get the bucket, validate tries to list the bucket,
+    # to minimize permissions, we're turning that off
+    aws_bucket = args.get('--bucket')
+    bucket = conn.lookup(aws_bucket, validate=False)
+    key_basename = args.get('<id>')
+
+    # Where are we going to download this
+    tmp_name = tempfile.NamedTemporaryFile(delete=False).name
+    extracted_tmp_name = tempfile.mkdtemp()
+
+    volumes = get_volumes(args)
+    if not len(volumes):
+        raise Exception(
+            'No volumes specified and unable to infer from mounts')
+
+    try:
+        # Create the key
+        k = Key(bucket)
+        k.name = key_basename
+        k.get_contents_to_filename(tmp_name)
+
+        # Now extract to location
+        r = envoy.run(
+            'tar -C %s -xzf %s' %
+                (extracted_tmp_name, tmp_name,))
+
+        for f in volumes:
+            r = envoy.run('mv %s%s %s' % (
+                extracted_tmp_name, f.rstrip('/'),
+                        os.path.dirname(f.rstrip('/'))))
+
+            if r.status_code:
+                raise Exception(
+                    "There was an issue extracting volume:\n %s\n %s" %
+                        (r.std_err, r.std_out,))
+
+    finally:
+        envoy.run('rm -rf %s %s' % (tmp_name, extracted_tmp_name,))

@@ -19,7 +19,7 @@ import sys
 from docopt import docopt
 
 # import our helpers
-from api import upload
+from api import upload, download
 
 # Run the program
 if __name__ == '__main__':
