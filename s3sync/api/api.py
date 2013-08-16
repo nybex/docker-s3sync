@@ -10,6 +10,7 @@ from boto.s3.key import Key
 from boto.s3.bucket import Bucket
 
 from helpers import get_volumes
+from helpers.exceptions import *
 
 if not os.environ.get('AWS_ACCESS_KEY_ID') or (
         not os.environ.get('AWS_SECRET_ACCESS_KEY')):
@@ -42,12 +43,12 @@ def upload(args):
 
     upload_volumes = get_volumes(args)
     if not len(upload_volumes):
-        raise Exception(
+        raise NoVolumesError(
             'No volumes specified and unable to infer from mounts')
 
 
     if False in [os.path.isdir(x) for x in upload_volumes]:
-        raise Exception(
+        raise VolumeNotDirectoryError(
             'Unable to find all specified volumes')
 
     # Tar up the volumes, gzip for size reduction
@@ -60,9 +61,9 @@ def upload(args):
             key.name = k
             try:
                 key.set_contents_from_filename(tmp_name, encrypt_key=True)
-            except Exception as e:
-                raise Exception('There was a problem storing the data: %s' %
-                        e.message)
+            except KeyError:
+                raise NoBucketError('The specified bucket does not exist')
+
     finally:
         envoy.run('rm -rf %s' % tmp_name)
 
