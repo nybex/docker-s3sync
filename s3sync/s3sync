@@ -18,12 +18,12 @@ import sys
 
 from docopt import docopt
 
-# import our helpers
-from api import upload, download
-
 # Run the program
 if __name__ == '__main__':
     arguments = docopt(__doc__, version='s3sync 1.0')
+
+    # Only import api if not running --help
+    from api import upload, download
 
     try:
         if arguments.get('upload'):
