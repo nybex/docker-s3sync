@@ -54,7 +54,7 @@ def upload(args):
     # Tar up the volumes, gzip for size reduction
     tmp_name = tempfile.NamedTemporaryFile().name
     try:
-        envoy.run('tar czf %s %s' % (tmp_name, ' '.join(upload_volumes),))
+        envoy.run('tar cf %s %s' % (tmp_name, ' '.join(upload_volumes),))
 
         for k in keys:
             key = Key(bucket)
@@ -92,7 +92,7 @@ def download(args):
 
         # Now extract to location
         r = envoy.run(
-            'tar -C %s -xzf %s' %
+            'tar -C %s -xf %s' %
                 (extracted_tmp_name, tmp_name,))
 
         for f in volumes:
