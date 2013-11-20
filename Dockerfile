@@ -2,7 +2,7 @@
 #
 # VERSION               0.0.1
 
-FROM s3sync
+FROM stackbrew/ubuntu:12.04
 MAINTAINER Jud Stephenson "<jud@nybex.com>"
 
 # Add the s3sync command
