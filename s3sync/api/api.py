@@ -96,7 +96,7 @@ def download(args):
                 (extracted_tmp_name, tmp_name,))
 
         for f in volumes:
-            r = envoy.run('mv %s%s %s' % (
+            r = envoy.run('cp -r %s%s %s' % (
                 extracted_tmp_name, f.rstrip('/'),
                         os.path.dirname(f.rstrip('/'))))
 
